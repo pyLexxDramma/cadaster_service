@@ -1,0 +1,41 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=cadastral_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data/
+    ulimits:
+      memlock: -1
+      nofile: 65535
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "user" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://user:password@db:5432/cadastral_db
+      - EXTERNAL_API_URL=http://your-actual-external-api.com
+      - JWT_SECRET_KEY=your-super-secret-key-change-me-in-production
+      - ACCESS_TOKEN_EXPIRE_MINUTES=60
+    depends_on:
+      db:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ulimits:
+      memlock: -1
+      nofile: 65535
+
+volumes:
+  postgres_prod_data:

@@ -1,0 +1,58 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=cadastral_db_test
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data/
+    ulimits:
+      memlock: -1
+      nofile: 65535
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "user" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    volumes:
+      - .:/app
+      - ./wait-for-it.sh:/usr/local/bin/wait-for-it.sh
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://user:password@db:5432/cadastral_db_test
+      - EXTERNAL_API_URL=http://external_api_mock:8001
+      - JWT_SECRET_KEY=your-super-secret-key-change-me-in-production
+    depends_on:
+      db:
+        condition: service_healthy
+      external_api_mock:
+        condition: service_started
+    command: >
+      sh -c "wait-for-it.sh db:5432 --strict --timeout=30 &&
+             wait-for-it.sh external_api_mock:8001 --strict --timeout=30 &&
+             pytest -v tests/test_main.py"
+    ulimits:
+      memlock: -1
+      nofile: 65535
+
+  external_api_mock:
+    build: ./mock_external_server
+    ports:
+      - "8001:8001"
+    environment:
+      - EXTERNAL_API_PORT=8001
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8001/docs" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_test_data:
